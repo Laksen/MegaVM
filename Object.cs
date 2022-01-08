@@ -21,12 +21,9 @@ namespace MegaVM
 
     public enum TypeKind
     {
-        Any,
-
         // Primitives
         Void,
         Int,
-        UInt,
         Real,
 
         Array,

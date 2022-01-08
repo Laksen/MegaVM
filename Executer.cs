@@ -6,10 +6,11 @@ namespace MegaVM.Execution
 {
     public enum ValueKind
     {
+        Void,
         UInt,
         Real,
-
-        Special,
+        Struct,
+        Pointer,
     }
 
     public class Value
@@ -19,7 +20,9 @@ namespace MegaVM.Execution
         public UInt64 UIntValue;
         public double RealValue;
 
-        public byte[] DataValue;
+        public Value[] Fields = new Value[0];
+
+        public Value Content;
 
         public override string ToString()
         {
@@ -45,6 +48,21 @@ namespace MegaVM.Execution
             return new Value { ValueKind = ValueKind.Real, RealValue = result };
         }
 
+        private static Value Struct(Value[] fields)
+        {
+            return new Value { ValueKind = ValueKind.Struct, Fields = fields };
+        }
+
+        private static Value Array(uint length, TypeDef typeDef)
+        {
+            throw new NotImplementedException();
+        }
+
+        private static Value Pointer(int v, Value value)
+        {
+            return new Value { ValueKind = ValueKind.Pointer, Content = value };
+        }
+
         internal UInt64 AsUInt()
         {
             return UIntValue;
@@ -55,9 +73,37 @@ namespace MegaVM.Execution
             return (Int64)UIntValue;
         }
 
-        internal static Value DefaultValue(TypeDef typeDef)
+        internal Value Cast(ValueKind kind)
         {
-            return Int(0); // TODO
+            return this;
+        }
+
+        internal static Value DefaultValue(Object obj, TypeDef typeDef)
+        {
+            switch (typeDef.Kind)
+            {
+                case TypeKind.Pointer:
+                case TypeKind.Void:
+                    return Int(0).Cast(ValueKind.Void);
+                case TypeKind.Int:
+                    return Int(0);
+                case TypeKind.Real:
+                    return Real(0);
+                case TypeKind.Struct:
+                    return Struct(typeDef.Fields.Select(f => Value.DefaultValue(obj, obj.Types[(int)f])).ToArray());
+                case TypeKind.Array:
+                    return Array(typeDef.Length, obj.Types[(int)typeDef.BaseType]);
+                default:
+                    throw new Exception("Failed default");
+            }
+        }
+
+        internal static Value AllocatePointer(Object obj, TypeDef typeDef)
+        {
+            if (typeDef.Kind == TypeKind.Pointer)
+                return Pointer(obj.Types.IndexOf(typeDef), DefaultValue(obj, obj.Types[(int)typeDef.BaseType]));
+            else
+                throw new Exception("Not a pointer type");
         }
     }
 
@@ -88,8 +134,8 @@ namespace MegaVM.Execution
                         args.Add(stack.Pop());
                     argumentStack.Push(args.ToArray());
 
-                    localsStack.Push(sym.Locals.Select(x => Value.DefaultValue(obj.Types[(int)x])).ToArray());
-                    
+                    localsStack.Push(sym.Locals.Select(x => Value.DefaultValue(obj, obj.Types[(int)x])).ToArray());
+
                     returnStack.Push(nextInstr);
 
                     nextInstr = sym.Offset;
@@ -123,6 +169,20 @@ namespace MegaVM.Execution
 
                 case "ldloc": return inst => stack.Push(localsStack.Peek()[(int)inst.Argument]);
                 case "stloc": return inst => localsStack.Peek()[(int)inst.Argument] = stack.Pop();
+
+                case "new": return inst => stack.Push(Value.AllocatePointer(obj, obj.Types[(int)inst.Argument]));
+                case "stfld": return inst =>
+                {
+                    var ptr = stack.Pop();
+                    var value = stack.Pop();
+                    ptr.Content.Fields[(int)inst.Argument] = value;
+                };
+                case "ldfld": return inst =>
+                {
+                    var ptr = stack.Pop();
+                    var value = ptr.Content.Fields[(int)inst.Argument];
+                    stack.Push(value);
+                };
 
                 case "addi": return inst => DoIBin((a, b) => a + b);
                 case "subi": return inst => DoIBin((a, b) => a - b);
