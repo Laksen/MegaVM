@@ -6,9 +6,10 @@ namespace MegaVM.Execution
 {
     public enum ValueKind
     {
+        Void,
         UInt,
         Real,
-        Special,
+        Struct,
     }
 
     public class Value
@@ -64,8 +65,8 @@ namespace MegaVM.Execution
                         args.Add(stack.Pop());
                     argumentStack.Push(args.ToArray());
 
-                    localsStack.Push(sym.Locals.Select(x => Value.DefaultValue(obj.Types[(int)x])).ToArray());
-                    
+                    localsStack.Push(sym.Locals.Select(x => Value.DefaultValue(obj, obj.Types[(int)x])).ToArray());
+
                     returnStack.Push(nextInstr);
 
                     nextInstr = sym.Offset;
@@ -99,6 +100,20 @@ namespace MegaVM.Execution
 
                 case "ldloc": return inst => stack.Push(localsStack.Peek()[(int)inst.Argument]);
                 case "stloc": return inst => localsStack.Peek()[(int)inst.Argument] = stack.Pop();
+
+                case "new": return inst => stack.Push(Value.DefaultValue(obj, obj.Types[(int)inst.Argument]));
+                case "stfld": return inst =>
+                {
+                    var ptr = stack.Pop();
+                    var value = stack.Pop();
+                    ((Array)ptr.ValueData).SetValue(value, (int)inst.Argument);
+                };
+                case "ldfld": return inst =>
+                {
+                    var ptr = stack.Pop();
+                    var value = ((Array)ptr.ValueData).GetValue((int)inst.Argument);
+                    stack.Push(new Value(value));
+                };
 
                 case "addi": return inst => DoIBin((a, b) => a + b);
                 case "subi": return inst => DoIBin((a, b) => a - b);
