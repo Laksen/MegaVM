@@ -30,6 +30,7 @@ namespace MegaVM
         OpenArray,
         Struct,
         Pointer,
+        Value
     }
 
     public class TypeDef
@@ -58,15 +59,20 @@ namespace MegaVM
         public UInt32 ReturnType;
         public UInt32[] Parameters = new UInt32[0];
         public UInt32[] Locals = new UInt32[0];
+
+        public override string ToString() => $"sym: {Name}: {Type}";
     }
 
     public class Instruction
     {
+        public Instruction(Image image) => this.image = image;
         public UInt32 Symbol;
         public UInt64 Argument;
+        internal Image image;
+        public override string ToString() => $"{image.Symbols[(int)Symbol].Name} {Argument}";
     }
 
-    public class Object
+    public class Image
     {
         private static void Serialize(BinaryWriter writer, String sym)
         {
@@ -225,7 +231,7 @@ namespace MegaVM
             return def;
         }
 
-        public static Object Deserialize(ReadOnlySpan<byte> data)
+        public static Image Deserialize(ReadOnlySpan<byte> data)
         {
             // Parse header
             var magic = BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(4 * 0));
@@ -235,7 +241,7 @@ namespace MegaVM
             var dataMemoryBytes = BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(4 * 4));
             var dataBytes = BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(4 * 5));
 
-            var result = new Object();
+            var result = new Image();
 
             data = data.Slice(4 * 6);
 
@@ -250,7 +256,7 @@ namespace MegaVM
             // Instructions
             for (int i = 0; i < instrCount; i++)
             {
-                result.Instructions.Add(new Instruction()
+                result.Instructions.Add(new Instruction(result)
                 {
                     Symbol = BinaryPrimitives.ReadUInt32LittleEndian(data),
                     Argument = BinaryPrimitives.ReadUInt64LittleEndian(data.Slice(4))
@@ -265,11 +271,36 @@ namespace MegaVM
             return result;
         }
 
-        public List<TypeDef> Types { get; } = new List<TypeDef>();
+        public List<TypeDef> Types { get; } = new List<TypeDef>
+        {
+            new()
+            {
+                Kind = TypeKind.Void,
+                Name = "void"
+            },
+            new()
+            {
+                Kind = TypeKind.Int,
+                Name = "int"
+            },
+            new()
+            {
+                Kind = TypeKind.Real,
+                Name = "real"
+            },
+            new()
+            {
+                Kind = TypeKind.Value,
+                Name = "value"
+            },
+        };
+        
+        public readonly uint ValueType = 3;
         public List<Symbol> Symbols { get; } = new List<Symbol>();
 
         public List<Instruction> Instructions { get; } = new List<Instruction>();
         public byte[] Data { get; set; } = new byte[0];
+        
 
         public Symbol GetSymbol(string name)
         {

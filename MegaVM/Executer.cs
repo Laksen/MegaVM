@@ -4,12 +4,13 @@ using System.Linq;
 
 namespace MegaVM.Execution
 {
-    public enum ValueKind
+    public enum ValueKind : int
     {
-        Void,
-        UInt,
-        Real,
-        Struct,
+        Void = 0,
+        UInt = 1,
+        Real = 2,
+        Struct = 3,
+        Value = 4
     }
 
     public class Value
@@ -19,23 +20,21 @@ namespace MegaVM.Execution
         public Value(object obj) => ValueData = obj;
         public Value(){}
         public object ValueData { get; set; }
-
-
+        
         public override string ToString()
         {
             return ValueData.ToString();
         }
 
-        
         internal static Value Int(UInt64 argument) =>  new Value { ValueData = argument};
-
+        
         internal static Value Real(UInt64 argument) => new Value { ValueData = argument };
-
+        
         internal UInt64 AsUInt() => (UInt64)ValueData;
-
+        
 
         internal Int64 AsInt() => (Int64)ValueData;
-
+        
         private static Value Struct(Value[] fields)
         {
             return new Value { ValueKind = ValueKind.Struct, ValueData = fields };
@@ -45,12 +44,12 @@ namespace MegaVM.Execution
         {
             throw new NotImplementedException();
         }
-
-        internal static Value DefaultValue(Object obj, TypeDef typeDef)
+        internal static Value DefaultValue(Image obj, TypeDef typeDef)
         {
             switch (typeDef.Kind)
             {
-                case TypeKind.Pointer:
+                case TypeKind.Value:
+                case TypeKind.Pointer:    
                 case TypeKind.Void:
                     return Int(0);
                 case TypeKind.Int:
@@ -69,16 +68,17 @@ namespace MegaVM.Execution
 
     public class Executer
     {
+        public Stack<Value> Stack => stack;
         Stack<Value> stack = new Stack<Value>();
         Dictionary<UInt32, Action<Instruction>> CallActions = new Dictionary<uint, Action<Instruction>>();
-        Object obj;
+        Image obj;
 
         Stack<Value[]> argumentStack = new Stack<Value[]>();
         Stack<Value[]> localsStack = new Stack<Value[]>();
         private Stack<UInt32> returnStack = new Stack<UInt32>();
         private UInt32 nextInstr;
 
-        public Executer(Object obj, Dictionary<string, Action<Instruction, Stack<Value>>> imports)
+        public Executer(Image obj, Dictionary<string, Action<Instruction, Stack<Value>>> imports)
         {
             this.obj = obj;
 
@@ -119,6 +119,14 @@ namespace MegaVM.Execution
         {
             switch (sym.Name)
             {
+                case "dup": return inst => stack.Push(stack.Peek());
+                case "swap": return inst =>
+                {
+                    var a = stack.Pop();
+                    var b = stack.Pop();
+                    stack.Push(a);
+                    stack.Push(b);
+                };
                 case "ldi": return inst => stack.Push(Value.Int(inst.Argument));
                 case "ldr": return inst => stack.Push(Value.Real(inst.Argument));
                 case "pop": return inst => stack.Pop();
@@ -133,8 +141,8 @@ namespace MegaVM.Execution
                 case "new": return inst => stack.Push(Value.DefaultValue(obj, obj.Types[(int)inst.Argument]));
                 case "stfld": return inst =>
                 {
-                    var ptr = stack.Pop();
                     var value = stack.Pop();
+                    var ptr = stack.Pop();
                     ((Array)ptr.ValueData).SetValue(value, (int)inst.Argument);
                 };
                 case "ldfld": return inst =>
@@ -148,7 +156,7 @@ namespace MegaVM.Execution
                 case "subi": return inst => DoIBin((a, b) => a - b);
                 case "muli": return inst => DoIBin((a, b) => a * b);
                 case "divi": return inst => DoIBin((a, b) => a / b);
-
+                
                 case "andi": return inst => DoIBin((a, b) => a & b);
                 case "xori": return inst => DoIBin((a, b) => a ^ b);
                 case "ori": return inst => DoIBin((a, b) => a | b);
@@ -166,6 +174,13 @@ namespace MegaVM.Execution
             throw new NotImplementedException(sym.Name);
         }
 
+        private void DoObj(Func<object, object, object> func)
+        {
+            var b = stack.Pop();
+            var a = stack.Pop();
+            stack.Push( new Value(func(a.ValueData, b.ValueData)));
+        }
+        
         private void DoIBin(Func<UInt64, UInt64, UInt64> func)
         {
             var b = stack.Pop();
@@ -189,7 +204,7 @@ namespace MegaVM.Execution
             throw new NotImplementedException();
         }
 
-        private void ExecuteAt(UInt32 offset)
+        public int ExecuteAt(UInt32 offset)
         {
             int current = (int)offset;
 
@@ -198,18 +213,29 @@ namespace MegaVM.Execution
                 nextInstr = (UInt32)current + 1;
 
                 var instr = obj.Instructions[current];
-                CallActions[instr.Symbol](instr);
+                var sym = obj.Symbols[(int)instr.Symbol];
+                if (sym.Type == SymbolType.Builtin)
+                {
+                    ResolveBuiltin(sym)(instr);
+                }
+                else if (CallActions.TryGetValue(instr.Symbol, out var a))
+                {
+                    a(instr);
+                }
+                //CallActions[instr.Symbol](instr);
 
                 if (nextInstr == 0xFFFFFFFF)
                     break;
 
                 current = (int)nextInstr;
             }
+
+            return current;
         }
 
-        public void Execute()
+        public int Execute()
         {
-            ExecuteAt(0);
+            return ExecuteAt(0);
         }
     }
 }
