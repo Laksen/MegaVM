@@ -4,16 +4,19 @@ using System.Linq;
 
 namespace MegaVM.Execution
 {
-    public enum ValueKind
+    public enum ValueKind : int
     {
-        Void,
-        UInt,
-        Real,
-        Struct,
+        Void = 0,
+        UInt = 1,
+        Real = 2,
+        Struct = 3,
+        Value = 4
     }
 
     public class Value
     {
+        public ValueKind ValueKind;
+
         public Value(object obj) => ValueData = obj;
         public Value(){}
         public object ValueData { get; set; }
@@ -32,24 +35,50 @@ namespace MegaVM.Execution
 
         internal Int64 AsInt() => (Int64)ValueData;
         
-        internal static Value DefaultValue(TypeDef typeDef)
+        private static Value Struct(Value[] fields)
         {
-            return Int(0); // TODO
+            return new Value { ValueKind = ValueKind.Struct, ValueData = fields };
+        }
+
+        private static Value Array(uint length, TypeDef typeDef)
+        {
+            throw new NotImplementedException();
+        }
+        internal static Value DefaultValue(Image obj, TypeDef typeDef)
+        {
+            switch (typeDef.Kind)
+            {
+                case TypeKind.Value:
+                case TypeKind.Pointer:    
+                case TypeKind.Void:
+                    return Int(0);
+                case TypeKind.Int:
+                    return Int(0);
+                case TypeKind.Real:
+                    return Real(0);
+                case TypeKind.Struct:
+                    return Struct(typeDef.Fields.Select(f => Value.DefaultValue(obj, obj.Types[(int)f])).ToArray());
+                case TypeKind.Array:
+                    return Array(typeDef.Length, obj.Types[(int)typeDef.BaseType]);
+                default:
+                    throw new Exception("Failed default");
+            }
         }
     }
 
     public class Executer
     {
+        public Stack<Value> Stack => stack;
         Stack<Value> stack = new Stack<Value>();
         Dictionary<UInt32, Action<Instruction>> CallActions = new Dictionary<uint, Action<Instruction>>();
-        Object obj;
+        Image obj;
 
         Stack<Value[]> argumentStack = new Stack<Value[]>();
         Stack<Value[]> localsStack = new Stack<Value[]>();
         private Stack<UInt32> returnStack = new Stack<UInt32>();
         private UInt32 nextInstr;
 
-        public Executer(Object obj, Dictionary<string, Action<Instruction, Stack<Value>>> imports)
+        public Executer(Image obj, Dictionary<string, Action<Instruction, Stack<Value>>> imports)
         {
             this.obj = obj;
 
@@ -90,6 +119,14 @@ namespace MegaVM.Execution
         {
             switch (sym.Name)
             {
+                case "dup": return inst => stack.Push(stack.Peek());
+                case "swap": return inst =>
+                {
+                    var a = stack.Pop();
+                    var b = stack.Pop();
+                    stack.Push(a);
+                    stack.Push(b);
+                };
                 case "ldi": return inst => stack.Push(Value.Int(inst.Argument));
                 case "ldr": return inst => stack.Push(Value.Real(inst.Argument));
                 case "pop": return inst => stack.Pop();
@@ -104,8 +141,8 @@ namespace MegaVM.Execution
                 case "new": return inst => stack.Push(Value.DefaultValue(obj, obj.Types[(int)inst.Argument]));
                 case "stfld": return inst =>
                 {
-                    var ptr = stack.Pop();
                     var value = stack.Pop();
+                    var ptr = stack.Pop();
                     ((Array)ptr.ValueData).SetValue(value, (int)inst.Argument);
                 };
                 case "ldfld": return inst =>

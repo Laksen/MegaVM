@@ -26,7 +26,7 @@ namespace MegaVM
 
                     // Console.WriteLine(mem.Length);
 
-                    obj = Object.Deserialize(mem.ToArray().AsSpan());
+                    obj = Image.Deserialize(mem.ToArray().AsSpan());
                 }
             }
 
@@ -55,9 +55,9 @@ namespace MegaVM
             Console.WriteLine(value.ToString());
         }
 
-        private static Object MakeFib()
+        private static Image MakeFib()
         {
-            var obj = new Object();
+            var obj = new Image();
 
             var tdInt = obj.TypeDef("int", TypeKind.Int);
 
@@ -111,7 +111,7 @@ namespace MegaVM
 
     public static class ObjectHelpers
     {
-        public static UInt32 TypeDef(this Object obj, string name, TypeKind kind)
+        public static UInt32 TypeDef(this Image obj, string name, TypeKind kind)
         {
             var result = (UInt32)obj.Types.Count;
 
@@ -120,36 +120,44 @@ namespace MegaVM
             return result;
         }
 
-        public static void Push(this Object obj, int value)
+        public static void Push(this Image obj, int value)
         {
             obj.Op("ldi", (UInt64)value);
         }
 
-        public static void Call(this Object obj, string name)
+        public static void Call(this Image obj, string name)
         {
             var opSym = obj.GetSymbol(name);
             var idx = obj.Symbols.IndexOf(opSym);
 
-            var result = new Instruction { Symbol = (UInt32)idx };
+            var result = new Instruction(obj) { Symbol = (UInt32)idx };
             obj.Instructions.Add(result);
         }
 
-        public static Instruction Op(this Object obj, string name, double value) =>
+        public static Instruction Op(this Image obj, string name, double value) =>
             obj.Op(name, BitConverter.DoubleToInt64Bits(value));
 
-        public static Instruction Op(this Object obj, string name, UInt64 value = 0)
+        public static Instruction Op(this Image obj, string name, UInt64 value = 0)
         {
             var opSym = obj.GetSymbol(name);
             opSym.Type = SymbolType.Builtin;
 
             var idx = obj.Symbols.IndexOf(opSym);
 
-            var result = new Instruction { Symbol = (UInt32)idx, Argument = value };
+            var result = new Instruction(obj) { Symbol = (UInt32)idx, Argument = value };
+            obj.Instructions.Add(result);
+            return result;
+        }
+        
+        public static Instruction Op(this Image obj, Symbol opSym)
+        {
+            var idx = obj.Symbols.IndexOf(opSym);
+            var result = new Instruction(obj) { Symbol = (UInt32)idx, Argument = 0 };
             obj.Instructions.Add(result);
             return result;
         }
 
-        public static void Define(this Object obj, string name, UInt32[] argTypes, UInt32 resultType)
+        public static void Define(this Image obj, string name, UInt32[] argTypes, UInt32 resultType)
         {
             var sym = obj.GetSymbol(name);
             sym.Type = SymbolType.Local;
