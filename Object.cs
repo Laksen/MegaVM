@@ -60,6 +60,8 @@ namespace MegaVM
         public UInt32 Offset;
         public UInt32 ReturnType;
         public UInt32[] Parameters = new UInt32[0];
+
+        public override string ToString() => $"sym: {Name}: {Type}";
     }
 
     public class Instruction

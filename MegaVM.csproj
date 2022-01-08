@@ -5,4 +5,19 @@
     <TargetFramework>net5.0</TargetFramework>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Remove="MegaLisp\**" />
+    <Compile Remove="MegaLisp.Repl\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Remove="MegaLisp\**" />
+    <EmbeddedResource Remove="MegaLisp.Repl\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="MegaLisp\**" />
+    <None Remove="MegaLisp.Repl\**" />
+  </ItemGroup>
+
 </Project>

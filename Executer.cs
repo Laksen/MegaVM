@@ -3,6 +3,17 @@ using System.Collections.Generic;
 
 namespace MegaVM.Execution
 {
+    class Cons
+    {
+        public object Car;
+        public object Cdr;
+
+        public Cons(object car, object cdr)
+        {
+            Car = car;
+            Cdr = cdr;
+        }
+    }
     public enum ValueKind
     {
         UInt,
@@ -13,46 +24,24 @@ namespace MegaVM.Execution
 
     public class Value
     {
-        public ValueKind ValueKind;
-
-        public UInt64 UIntValue;
-        public double RealValue;
-
-        public byte[] DataValue;
-
+        public Value(object obj) => ValueData = obj;
+        public Value(){}
+        public object ValueData { get; set; }
+        
         public override string ToString()
         {
-            switch (ValueKind)
-            {
-                case ValueKind.UInt:
-                    return UIntValue.ToString();
-                case ValueKind.Real:
-                    return RealValue.ToString();
-                default:
-                    return "<special>";
-            }
+            return ValueData.ToString();
         }
 
-        internal static Value Int(UInt64 argument)
-        {
-            return new Value { ValueKind = ValueKind.UInt, UIntValue = argument };
-        }
+        internal static Value Int(UInt64 argument) =>  new Value { ValueData = argument};
+        
+        internal static Value Real(UInt64 argument) => new Value { ValueData = argument };
+        
+        internal UInt64 AsUInt() => (UInt64)ValueData;
+        
 
-        internal static Value Real(UInt64 argument)
-        {
-            var result = BitConverter.Int64BitsToDouble((Int64)argument);
-            return new Value { ValueKind = ValueKind.Real, RealValue = result };
-        }
-
-        internal UInt64 AsUInt()
-        {
-            return UIntValue;
-        }
-
-        internal Int64 AsInt()
-        {
-            return (Int64)UIntValue;
-        }
+        internal Int64 AsInt() => (Int64)ValueData;
+        
     }
 
     public class Executer
@@ -115,6 +104,7 @@ namespace MegaVM.Execution
                 case "subi": return inst => DoIBin((a, b) => a - b);
                 case "muli": return inst => DoIBin((a, b) => a * b);
                 case "divi": return inst => DoIBin((a, b) => a / b);
+                case "cons" : return inst => DoObj((a, b) => new Cons(a, b));
 
                 case "andi": return inst => DoIBin((a, b) => a & b);
                 case "xori": return inst => DoIBin((a, b) => a ^ b);
@@ -133,6 +123,13 @@ namespace MegaVM.Execution
             throw new NotImplementedException(sym.Name);
         }
 
+        private void DoObj(Func<object, object, object> func)
+        {
+            var b = stack.Pop();
+            var a = stack.Pop();
+            stack.Push( new Value(func(a.ValueData, b.ValueData)));
+        }
+        
         private void DoIBin(Func<UInt64, UInt64, UInt64> func)
         {
             var b = stack.Pop();
@@ -156,7 +153,7 @@ namespace MegaVM.Execution
             throw new NotImplementedException();
         }
 
-        private void ExecuteAt(UInt32 offset)
+        public int ExecuteAt(UInt32 offset)
         {
             int current = (int)offset;
 
@@ -165,18 +162,29 @@ namespace MegaVM.Execution
                 nextInstr = (UInt32)current + 1;
 
                 var instr = obj.Instructions[current];
-                CallActions[instr.Symbol](instr);
+                var sym = obj.Symbols[(int)instr.Symbol];
+                if (sym.Type == SymbolType.Builtin)
+                {
+                    ResolveBuiltin(sym)(instr);
+                }
+                else if (CallActions.TryGetValue(instr.Symbol, out var a))
+                {
+                    a(instr);
+                }
+                //CallActions[instr.Symbol](instr);
 
                 if (nextInstr == 0xFFFFFFFF)
                     break;
 
                 current = (int)nextInstr;
             }
+
+            return current;
         }
 
-        public void Execute()
+        public int Execute()
         {
-            ExecuteAt(0);
+            return ExecuteAt(0);
         }
     }
 }

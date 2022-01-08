@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MegaVM", "MegaVM.csproj", "{5014F436-1F9F-4077-8CB7-93F390AEC84F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MegaLisp", "MegaLisp\MegaLisp.csproj", "{8625FE58-3566-4A97-A846-152AA2E5B50A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MegaLisp.Repl", "MegaLisp.Repl\MegaLisp.Repl.csproj", "{EADBC7DA-DF4C-4D99-B586-48B9C728CF9C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5014F436-1F9F-4077-8CB7-93F390AEC84F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5014F436-1F9F-4077-8CB7-93F390AEC84F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5014F436-1F9F-4077-8CB7-93F390AEC84F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5014F436-1F9F-4077-8CB7-93F390AEC84F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8625FE58-3566-4A97-A846-152AA2E5B50A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8625FE58-3566-4A97-A846-152AA2E5B50A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8625FE58-3566-4A97-A846-152AA2E5B50A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8625FE58-3566-4A97-A846-152AA2E5B50A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EADBC7DA-DF4C-4D99-B586-48B9C728CF9C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EADBC7DA-DF4C-4D99-B586-48B9C728CF9C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EADBC7DA-DF4C-4D99-B586-48B9C728CF9C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EADBC7DA-DF4C-4D99-B586-48B9C728CF9C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
