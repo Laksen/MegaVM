@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace MegaVM.Execution
 {
@@ -42,6 +43,10 @@ namespace MegaVM.Execution
 
         internal Int64 AsInt() => (Int64)ValueData;
         
+        internal static Value DefaultValue(TypeDef typeDef)
+        {
+            return Int(0); // TODO
+        }
     }
 
     public class Executer
@@ -51,6 +56,7 @@ namespace MegaVM.Execution
         Object obj;
 
         Stack<Value[]> argumentStack = new Stack<Value[]>();
+        Stack<Value[]> localsStack = new Stack<Value[]>();
         private Stack<UInt32> returnStack = new Stack<UInt32>();
         private UInt32 nextInstr;
 
@@ -69,6 +75,9 @@ namespace MegaVM.Execution
                     for (int i = 0; i < sym.Parameters.Length; i++)
                         args.Add(stack.Pop());
                     argumentStack.Push(args.ToArray());
+
+                    localsStack.Push(sym.Locals.Select(x => Value.DefaultValue(obj.Types[(int)x])).ToArray());
+                    
                     returnStack.Push(nextInstr);
 
                     nextInstr = sym.Offset;
@@ -99,6 +108,9 @@ namespace MegaVM.Execution
                 case "halt": return inst => nextInstr = 0xFFFFFFFF;
 
                 case "ldarg": return inst => stack.Push(argumentStack.Peek()[(int)inst.Argument]);
+
+                case "ldloc": return inst => stack.Push(localsStack.Peek()[(int)inst.Argument]);
+                case "stloc": return inst => localsStack.Peek()[(int)inst.Argument] = stack.Pop();
 
                 case "addi": return inst => DoIBin((a, b) => a + b);
                 case "subi": return inst => DoIBin((a, b) => a - b);

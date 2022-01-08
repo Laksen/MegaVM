@@ -60,6 +60,7 @@ namespace MegaVM
         public UInt32 Offset;
         public UInt32 ReturnType;
         public UInt32[] Parameters = new UInt32[0];
+        public UInt32[] Locals = new UInt32[0];
 
         public override string ToString() => $"sym: {Name}: {Type}";
     }
@@ -118,6 +119,7 @@ namespace MegaVM
             writer.Write(result);
             Serialize(writer, sym.Name);
             Serialize(writer, sym.Parameters);
+            Serialize(writer, sym.Locals);
         }
 
         private static void Serialize(BinaryWriter writer, Instruction instr)
@@ -207,6 +209,7 @@ namespace MegaVM
 
             sym.Name = DecodeString(ref data);
             sym.Parameters = DecodeArray(ref data);
+            sym.Locals = DecodeArray(ref data);
 
             return sym;
         }
