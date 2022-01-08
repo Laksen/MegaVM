@@ -10,72 +10,40 @@ namespace MegaVM.Execution
         UInt,
         Real,
         Struct,
-        Pointer,
     }
 
     public class Value
     {
         public ValueKind ValueKind;
 
-        public UInt64 UIntValue;
-        public double RealValue;
+        public Value(object obj) => ValueData = obj;
+        public Value(){}
+        public object ValueData { get; set; }
 
-        public Value[] Fields = new Value[0];
-
-        public Value Content;
 
         public override string ToString()
         {
-            switch (ValueKind)
-            {
-                case ValueKind.UInt:
-                    return UIntValue.ToString();
-                case ValueKind.Real:
-                    return RealValue.ToString();
-                default:
-                    return "<special>";
-            }
+            return ValueData.ToString();
         }
 
-        internal static Value Int(UInt64 argument)
-        {
-            return new Value { ValueKind = ValueKind.UInt, UIntValue = argument };
-        }
+        
+        internal static Value Int(UInt64 argument) =>  new Value { ValueData = argument};
 
-        internal static Value Real(UInt64 argument)
-        {
-            var result = BitConverter.Int64BitsToDouble((Int64)argument);
-            return new Value { ValueKind = ValueKind.Real, RealValue = result };
-        }
+        internal static Value Real(UInt64 argument) => new Value { ValueData = argument };
+
+        internal UInt64 AsUInt() => (UInt64)ValueData;
+
+
+        internal Int64 AsInt() => (Int64)ValueData;
 
         private static Value Struct(Value[] fields)
         {
-            return new Value { ValueKind = ValueKind.Struct, Fields = fields };
+            return new Value { ValueKind = ValueKind.Struct, ValueData = fields };
         }
 
         private static Value Array(uint length, TypeDef typeDef)
         {
             throw new NotImplementedException();
-        }
-
-        private static Value Pointer(int v, Value value)
-        {
-            return new Value { ValueKind = ValueKind.Pointer, Content = value };
-        }
-
-        internal UInt64 AsUInt()
-        {
-            return UIntValue;
-        }
-
-        internal Int64 AsInt()
-        {
-            return (Int64)UIntValue;
-        }
-
-        internal Value Cast(ValueKind kind)
-        {
-            return this;
         }
 
         internal static Value DefaultValue(Object obj, TypeDef typeDef)
@@ -84,7 +52,7 @@ namespace MegaVM.Execution
             {
                 case TypeKind.Pointer:
                 case TypeKind.Void:
-                    return Int(0).Cast(ValueKind.Void);
+                    return Int(0);
                 case TypeKind.Int:
                     return Int(0);
                 case TypeKind.Real:
@@ -96,14 +64,6 @@ namespace MegaVM.Execution
                 default:
                     throw new Exception("Failed default");
             }
-        }
-
-        internal static Value AllocatePointer(Object obj, TypeDef typeDef)
-        {
-            if (typeDef.Kind == TypeKind.Pointer)
-                return Pointer(obj.Types.IndexOf(typeDef), DefaultValue(obj, obj.Types[(int)typeDef.BaseType]));
-            else
-                throw new Exception("Not a pointer type");
         }
     }
 
@@ -170,18 +130,18 @@ namespace MegaVM.Execution
                 case "ldloc": return inst => stack.Push(localsStack.Peek()[(int)inst.Argument]);
                 case "stloc": return inst => localsStack.Peek()[(int)inst.Argument] = stack.Pop();
 
-                case "new": return inst => stack.Push(Value.AllocatePointer(obj, obj.Types[(int)inst.Argument]));
+                case "new": return inst => stack.Push(Value.DefaultValue(obj, obj.Types[(int)inst.Argument]));
                 case "stfld": return inst =>
                 {
                     var ptr = stack.Pop();
                     var value = stack.Pop();
-                    ptr.Content.Fields[(int)inst.Argument] = value;
+                    ((Array)ptr.ValueData).SetValue(value, (int)inst.Argument);
                 };
                 case "ldfld": return inst =>
                 {
                     var ptr = stack.Pop();
-                    var value = ptr.Content.Fields[(int)inst.Argument];
-                    stack.Push(value);
+                    var value = ((Array)ptr.ValueData).GetValue((int)inst.Argument);
+                    stack.Push(new Value(value));
                 };
 
                 case "addi": return inst => DoIBin((a, b) => a + b);
