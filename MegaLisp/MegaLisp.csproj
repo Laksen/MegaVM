@@ -8,7 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\MegaVM.csproj" />
+      <ProjectReference Include="..\MegaVM\MegaVM.csproj" />
     </ItemGroup>
 
 </Project>
