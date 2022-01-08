@@ -16,10 +16,29 @@ public class Engine
 {
     MegaVM.Object image = new ();
     private Executer ex;
+    
+    public Symbol add => resolveSymbol("+");
+    public Symbol sub => resolveSymbol("-");
+    public Symbol mul => resolveSymbol("*");
+    public Symbol div => resolveSymbol("/");
+    public Symbol cons => resolveSymbol("cons");
+    
     public Engine()
     {
-        ex = new(image, new());
+        var symbols = new Dictionary<string, Action<Instruction, Stack<Value>>>();
+        symbols["cons"] = (inst, stk) => DoObj(stk, (a, b) => new Cons(a, b));
+        symbols["cons"] = (inst, stk) => DoObj(stk, (a, b) => new Cons(a, b));
+
+        ex = new(image, symbols);
     }
+    
+    private void DoObj( Stack<Value> stack, Func<object, object, object> func)
+    {
+        var b = stack.Pop();
+        var a = stack.Pop();
+        stack.Push( new Value(func(a.ValueData, b.ValueData)));
+    }
+    
     public void Eval(string code)
     {
         var parser = new Parser();
@@ -36,14 +55,7 @@ public class Engine
 
     int symbolCounter = 10000;
     readonly Dictionary<string, Symbol> symbols = new ();
-    public Symbol add => resolveSymbol("+");
-    public Symbol sub => resolveSymbol("-");
-    public Symbol mul => resolveSymbol("*");
-    public Symbol div => resolveSymbol("/");
-    public Symbol cons => resolveSymbol("cons");
-    
-
-    
+ 
     Symbol resolveSymbol(string name)
     {
         if (symbols.TryGetValue(name, out var sym)) return sym;
@@ -60,6 +72,11 @@ public class Engine
         if (int.TryParse(tokenGroup.Data, out var val))
         {
             image.Op("ldi", (ulong)val);
+            return;
+        }
+        if (double.TryParse(tokenGroup.Data, out var valr))
+        {
+            image.Op("ldr", (double)valr);
             return;
         }
 

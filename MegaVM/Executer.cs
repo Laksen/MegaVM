@@ -4,22 +4,10 @@ using System.Linq;
 
 namespace MegaVM.Execution
 {
-    class Cons
-    {
-        public object Car;
-        public object Cdr;
-
-        public Cons(object car, object cdr)
-        {
-            Car = car;
-            Cdr = cdr;
-        }
-    }
     public enum ValueKind
     {
         UInt,
         Real,
-
         Special,
     }
 
@@ -116,8 +104,7 @@ namespace MegaVM.Execution
                 case "subi": return inst => DoIBin((a, b) => a - b);
                 case "muli": return inst => DoIBin((a, b) => a * b);
                 case "divi": return inst => DoIBin((a, b) => a / b);
-                case "cons" : return inst => DoObj((a, b) => new Cons(a, b));
-
+                
                 case "andi": return inst => DoIBin((a, b) => a & b);
                 case "xori": return inst => DoIBin((a, b) => a ^ b);
                 case "ori": return inst => DoIBin((a, b) => a | b);

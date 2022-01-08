@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Numerics;
 
 namespace MegaVM
 {
@@ -132,6 +133,9 @@ namespace MegaVM
             var result = new Instruction { Symbol = (UInt32)idx };
             obj.Instructions.Add(result);
         }
+
+        public static Instruction Op(this Object obj, string name, double value) =>
+            obj.Op(name, BitConverter.DoubleToInt64Bits(value));
 
         public static Instruction Op(this Object obj, string name, UInt64 value = 0)
         {
