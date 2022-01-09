@@ -4,18 +4,10 @@ using System.Linq;
 
 namespace MegaVM.Execution
 {
-    public enum ValueKind : int
-    {
-        Void = 0,
-        UInt = 1,
-        Real = 2,
-        Struct = 3,
-        Value = 4
-    }
-
+    
     public class Value
     {
-        public ValueKind ValueKind;
+        public uint ValueKind;
 
         public Value(object obj) => ValueData = obj;
         public Value(){}
@@ -35,18 +27,23 @@ namespace MegaVM.Execution
 
         internal Int64 AsInt() => (Int64)ValueData;
         
-        private static Value Struct(Value[] fields)
+        private static Value Struct(uint type, Value[] fields)
         {
-            return new Value { ValueKind = ValueKind.Struct, ValueData = fields };
+            return new Value { ValueKind = type, ValueData = fields };
         }
 
-        private static Value Array(uint length, TypeDef typeDef)
+        public static Value Array(Image obj, uint length, uint typeDef)
         {
-            throw new NotImplementedException();
+            var elemType = obj.Types[(int) typeDef].ElementType;
+            var array = Enumerable.Range(0, (int)length)
+                .Select(i => Value.DefaultValue(obj,  elemType))
+                .ToArray();
+            return new Value {ValueKind = typeDef, ValueData = array};
         }
-        internal static Value DefaultValue(Image obj, TypeDef typeDef)
+        public static Value DefaultValue(Image obj, uint typeId)
         {
-            switch (typeDef.Kind)
+            var type = obj.Types[(int)typeId];
+            switch (type.Kind)
             {
                 case TypeKind.Value:
                 case TypeKind.Pointer:    
@@ -57,9 +54,12 @@ namespace MegaVM.Execution
                 case TypeKind.Real:
                     return Real(0);
                 case TypeKind.Struct:
-                    return Struct(typeDef.Fields.Select(f => Value.DefaultValue(obj, obj.Types[(int)f])).ToArray());
+                    return Struct(typeId, type.Fields.Select(f => Value.DefaultValue(obj, f)).ToArray());
                 case TypeKind.Array:
-                    return Array(typeDef.Length, obj.Types[(int)typeDef.BaseType]);
+                    return Array(obj, type.Length, typeId);
+                case TypeKind.OpenArray:
+                    return Array(obj, 0, typeId);
+                
                 default:
                     throw new Exception("Failed default");
             }
@@ -75,8 +75,8 @@ namespace MegaVM.Execution
 
         Stack<Value[]> argumentStack = new Stack<Value[]>();
         Stack<Value[]> localsStack = new Stack<Value[]>();
-        private Stack<UInt32> returnStack = new Stack<UInt32>();
-        private UInt32 nextInstr;
+        private Stack<(uint symbol, uint offset)> returnStack = new Stack<(uint symbol, uint offset)>();
+        private (uint symbol, uint offset) nextInstr;
 
         public Executer(Image obj, Dictionary<string, Action<Instruction, Stack<Value>>> imports)
         {
@@ -84,6 +84,7 @@ namespace MegaVM.Execution
 
             for (int i = 0; i < obj.Symbols.Count; i++)
             {
+                int _i = i;
                 var sym = obj.Symbols[i];
 
                 Action<Instruction> act = (inst) =>
@@ -94,11 +95,11 @@ namespace MegaVM.Execution
                         args.Add(stack.Pop());
                     argumentStack.Push(args.ToArray());
 
-                    localsStack.Push(sym.Locals.Select(x => Value.DefaultValue(obj, obj.Types[(int)x])).ToArray());
+                    localsStack.Push(sym.Locals.Select(x => Value.DefaultValue(obj,x)).ToArray());
 
                     returnStack.Push(nextInstr);
 
-                    nextInstr = sym.Offset;
+                    nextInstr = ((uint)_i, 0);//sym.Offset;
                 };
 
                 switch (sym.Type)
@@ -131,14 +132,14 @@ namespace MegaVM.Execution
                 case "ldr": return inst => stack.Push(Value.Real(inst.Argument));
                 case "pop": return inst => stack.Pop();
                 case "ret": return inst => { argumentStack.Pop(); nextInstr = returnStack.Pop(); };
-                case "halt": return inst => nextInstr = 0xFFFFFFFF;
+                case "halt": return inst => nextInstr = (0xFFFFFFFF, 0);
 
                 case "ldarg": return inst => stack.Push(argumentStack.Peek()[(int)inst.Argument]);
 
                 case "ldloc": return inst => stack.Push(localsStack.Peek()[(int)inst.Argument]);
                 case "stloc": return inst => localsStack.Peek()[(int)inst.Argument] = stack.Pop();
 
-                case "new": return inst => stack.Push(Value.DefaultValue(obj, obj.Types[(int)inst.Argument]));
+                case "new": return inst => stack.Push(Value.DefaultValue(obj, (uint)inst.Argument));
                 case "stfld": return inst =>
                 {
                     var value = stack.Pop();
@@ -165,10 +166,10 @@ namespace MegaVM.Execution
                 case "lsri": return inst => DoIBin((a, b) => a >> (int)b);
                 case "asri": return inst => DoIBin((a, b) => (UInt64)((Int64)a >> (int)b));
 
-                case "jmp": return inst => nextInstr = (UInt32)inst.Argument;
-                case "beqi": return inst => DoICmp((a, b) => a == b, inst.Argument);
-                case "blti": return inst => DoICmp((a, b) => a < b, inst.Argument);
-                case "bltui": return inst => DoICmp((a, b) => (Int64)a < (Int64)b, inst.Argument);
+                case "jmp": return inst => nextInstr = (nextInstr.symbol, (UInt32)inst.Argument);
+                case "beqi": return inst => DoICmpJmp((a, b) => a == b, inst.Argument);
+                case "blti": return inst => DoICmpJmp((a, b) => a < b, inst.Argument);
+                case "bltui": return inst => DoICmpJmp((a, b) => (Int64)a < (Int64)b, inst.Argument);
             }
 
             throw new NotImplementedException(sym.Name);
@@ -188,12 +189,12 @@ namespace MegaVM.Execution
             stack.Push(Value.Int(func(a.AsUInt(), b.AsUInt())));
         }
 
-        private void DoICmp(Func<UInt64, UInt64, bool> func, UInt64 nextAddr)
+        private void DoICmpJmp(Func<UInt64, UInt64, bool> func, UInt64 nextAddr)
         {
             var b = stack.Pop();
             var a = stack.Pop();
             if (func(a.AsUInt(), b.AsUInt()))
-                nextInstr = (UInt32)nextAddr;
+                nextInstr = (nextInstr.symbol, (UInt32)nextAddr);
         }
 
         private Action<Instruction> ResolveImport(Symbol sym, Dictionary<string, Action<Instruction, Stack<Value>>> imports)
@@ -204,38 +205,53 @@ namespace MegaVM.Execution
             throw new NotImplementedException();
         }
 
-        public int ExecuteAt(UInt32 offset)
+        public (uint, uint) ExecuteAt(uint symbolId)
         {
-            int current = (int)offset;
-
+            (uint symbol, uint offset) current= (symbolId, 0);
+            nextInstr = current;
             while (true)
             {
-                nextInstr = (UInt32)current + 1;
-
-                var instr = obj.Instructions[current];
-                var sym = obj.Symbols[(int)instr.Symbol];
-                if (sym.Type == SymbolType.Builtin)
+                var sym = obj.Symbols[(int)current.symbol];
+                Assert.IsTrue(sym.Value.ValueKind == obj.InstructionArrayType);
+                var instructions = (Value[])sym.Value.ValueData;
+                
+                nextInstr.offset = nextInstr.offset + 1;
+                var instr = (Value[])instructions[current.offset].ValueData;
+                
+                var instrSym = instr[0].AsUInt();
+                var argument = instr[1].AsUInt();
+                var sym2 = obj.Symbols[(int)instrSym];
+                if (sym2.Type == SymbolType.Builtin)
                 {
-                    ResolveBuiltin(sym)(instr);
+                    ResolveBuiltin(sym2)(new Instruction(obj){Argument = argument, Symbol = (uint)instrSym});
                 }
-                else if (CallActions.TryGetValue(instr.Symbol, out var a))
+                else if (CallActions.TryGetValue((uint) instrSym, out var a))
                 {
-                    a(instr);
+                    a(new Instruction(obj){Argument = argument, Symbol = (uint)instrSym});
                 }
                 //CallActions[instr.Symbol](instr);
 
-                if (nextInstr == 0xFFFFFFFF)
+                if (nextInstr.symbol == 0xFFFFFFFF)
                     break;
 
-                current = (int)nextInstr;
+                current = nextInstr;
             }
 
             return current;
         }
 
-        public int Execute()
+        public void Execute()
         {
-            return ExecuteAt(0);
+            ExecuteAt(0);
         }
+    }
+
+    public static class Assert
+    {
+        public static void IsTrue(bool truth)
+        {
+            if (!truth)
+                throw new Exception();
+        } 
     }
 }
