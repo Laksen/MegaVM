@@ -30,7 +30,8 @@ namespace MegaVM
         OpenArray,
         Struct,
         Pointer,
-        Value
+        Value,
+        Function
     }
 
     public class TypeDef
@@ -39,8 +40,10 @@ namespace MegaVM
         public TypeKind Kind;
 
         public UInt32 Length; // Primitive=bytes, Array=elementcount
-        public UInt32 BaseType; // Pointer,Array,OpenArray
-        public UInt32[] Fields = new UInt32[0];
+        public UInt32 ElementType; // Pointer,Array,OpenArray
+        
+        public UInt32[] Fields = Array.Empty<UInt32>(); // Function, Struct
+        public UInt32[] ReturnType = Array.Empty<UInt32>(); // Function
     }
 
     public enum SymbolType
@@ -49,16 +52,17 @@ namespace MegaVM
         Import,
         Export,
         Local,
+        Global
     }
 
     public class Symbol
     {
         public string Name;
         public SymbolType Type;
-        public UInt32 Offset;
         public UInt32 ReturnType;
-        public UInt32[] Parameters = new UInt32[0];
-        public UInt32[] Locals = new UInt32[0];
+        public UInt32[] Parameters = Array.Empty<UInt32>();
+        public UInt32[] Locals = Array.Empty<UInt32>();
+        public Execution.Value Value;
 
         public override string ToString() => $"sym: {Name}: {Type}";
     }
@@ -74,6 +78,52 @@ namespace MegaVM
 
     public class Image
     {
+        public List<TypeDef> Types { get; } = new List<TypeDef>();
+        public readonly uint VoidType;
+        public readonly uint IntType;
+        public readonly uint RealType;
+        public readonly uint ValueType;
+        
+        public readonly uint InstructionType;
+        public readonly uint InstructionArrayType;
+
+        public readonly uint IntBinaryOp;
+        public List<Symbol> Symbols { get; } = new List<Symbol>();
+
+        //public List<Instruction> Instructions { get; } = new List<Instruction>();
+        public byte[] Data { get; set; } = new byte[0];
+
+        public Image()
+        {
+            VoidType = DefinePrimitive(TypeKind.Void, "void");
+            IntType = DefinePrimitive(TypeKind.Int, "int");
+            RealType = DefinePrimitive(TypeKind.Real, "Real");
+            ValueType = DefinePrimitive(TypeKind.Value, "Value");
+            
+            InstructionType =  DefineStruct( "Instruction", IntType, IntType);
+            InstructionArrayType = DefineArrayType(InstructionType);
+            IntBinaryOp = DefineFunctionType(IntType, IntType, IntType);
+        }
+
+        public uint DefineType(TypeDef def)
+        {
+            var typeid = Types.Count;
+            Types.Add(def);
+            return (uint)typeid;
+        }
+        public uint DefinePrimitive(TypeKind kind, string name) =>  DefineType(new TypeDef{Kind = kind, Name = name});
+        public uint DefineStruct(string name, params uint[] fields) =>  DefineType(new TypeDef{Name = name, Kind = TypeKind.Struct, Fields = fields});
+        public uint DefineFunctionType(uint returnType, params uint[] argumentTypes)
+        {
+            var t = new TypeDef {Kind = TypeKind.Function, Fields = argumentTypes, ReturnType = new[] {returnType}};
+            return DefineType(t);
+        }
+
+        public uint DefineArrayType(uint elementType) =>
+            DefineType(new TypeDef {Kind = TypeKind.OpenArray, ElementType = elementType});
+        public uint DefineArrayType(uint elementType, uint length) =>
+            DefineType(new TypeDef {Kind = TypeKind.Array, Length = length, ElementType = elementType});
+
         private static void Serialize(BinaryWriter writer, String sym)
         {
             Span<byte> result = stackalloc byte[4];
@@ -102,7 +152,7 @@ namespace MegaVM
 
             BinaryPrimitives.WriteUInt32LittleEndian(result.Slice(0), (UInt32)typedef.Kind);
             BinaryPrimitives.WriteUInt32LittleEndian(result.Slice(4), typedef.Length);
-            BinaryPrimitives.WriteUInt32LittleEndian(result.Slice(8), typedef.BaseType);
+            BinaryPrimitives.WriteUInt32LittleEndian(result.Slice(8), typedef.ElementType);
 
             writer.Write(result);
             Serialize(writer, typedef.Name);
@@ -114,7 +164,6 @@ namespace MegaVM
             Span<byte> result = stackalloc byte[12];
 
             BinaryPrimitives.WriteUInt32LittleEndian(result.Slice(0), (UInt32)sym.Type);
-            BinaryPrimitives.WriteUInt32LittleEndian(result.Slice(4), sym.Offset);
             BinaryPrimitives.WriteUInt32LittleEndian(result.Slice(8), sym.ReturnType);
 
             writer.Write(result);
@@ -141,14 +190,14 @@ namespace MegaVM
             UInt32 magic = (UInt32)0x12345678;
             UInt32 typeCount = (UInt32)Types.Count;
             UInt32 symbolCount = (UInt32)Symbols.Count;
-            UInt32 instrCount = (UInt32)Instructions.Count;
+            //UInt32 instrCount = (UInt32)Instructions.Count;
             UInt32 dataMemoryBytes = (UInt32)Data.Length;
             UInt32 dataBytes = (UInt32)CountNonZero(Data);
 
             BinaryPrimitives.WriteUInt32LittleEndian(header.Slice(4 * 0), magic);
             BinaryPrimitives.WriteUInt32LittleEndian(header.Slice(4 * 1), typeCount);
             BinaryPrimitives.WriteUInt32LittleEndian(header.Slice(4 * 2), symbolCount);
-            BinaryPrimitives.WriteUInt32LittleEndian(header.Slice(4 * 3), instrCount);
+            //BinaryPrimitives.WriteUInt32LittleEndian(header.Slice(4 * 3), instrCount);
             BinaryPrimitives.WriteUInt32LittleEndian(header.Slice(4 * 4), dataMemoryBytes);
             BinaryPrimitives.WriteUInt32LittleEndian(header.Slice(4 * 5), dataBytes);
 
@@ -161,7 +210,7 @@ namespace MegaVM
             Symbols.ForEach(obj => Serialize(writer, obj));
 
             // Instructions
-            Instructions.ForEach(obj => Serialize(writer, obj));
+            //Instructions.ForEach(obj => Serialize(writer, obj));
 
             // Data
             writer.Write(Data.AsSpan().Slice(0, (int)dataBytes));
@@ -203,7 +252,7 @@ namespace MegaVM
             var sym = new Symbol
             {
                 Type = (SymbolType)BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(4 * 0)),
-                Offset = BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(4 * 1)),
+                //Offset = BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(4 * 1)),
                 ReturnType = BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(4 * 2))
             };
             data = data.Slice(4 * 3);
@@ -221,7 +270,7 @@ namespace MegaVM
             {
                 Kind = (TypeKind)BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(4 * 0)),
                 Length = BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(4 * 1)),
-                BaseType = BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(4 * 2))
+                ElementType = BinaryPrimitives.ReadUInt32LittleEndian(data.Slice(4 * 2))
             };
             data = data.Slice(4 * 3);
 
@@ -256,12 +305,12 @@ namespace MegaVM
             // Instructions
             for (int i = 0; i < instrCount; i++)
             {
-                result.Instructions.Add(new Instruction(result)
-                {
-                    Symbol = BinaryPrimitives.ReadUInt32LittleEndian(data),
-                    Argument = BinaryPrimitives.ReadUInt64LittleEndian(data.Slice(4))
-                });
-                data = data.Slice(12);
+                //result.Instructions.Add(new Instruction(result)
+                //{
+                //    Symbol = BinaryPrimitives.ReadUInt32LittleEndian(data),
+                //    Argument = BinaryPrimitives.ReadUInt64LittleEndian(data.Slice(4))
+                //});
+                //data = data.Slice(12);
             }
 
             // Data
@@ -271,35 +320,6 @@ namespace MegaVM
             return result;
         }
 
-        public List<TypeDef> Types { get; } = new List<TypeDef>
-        {
-            new()
-            {
-                Kind = TypeKind.Void,
-                Name = "void"
-            },
-            new()
-            {
-                Kind = TypeKind.Int,
-                Name = "int"
-            },
-            new()
-            {
-                Kind = TypeKind.Real,
-                Name = "real"
-            },
-            new()
-            {
-                Kind = TypeKind.Value,
-                Name = "value"
-            },
-        };
-        
-        public readonly uint ValueType = 3;
-        public List<Symbol> Symbols { get; } = new List<Symbol>();
-
-        public List<Instruction> Instructions { get; } = new List<Instruction>();
-        public byte[] Data { get; set; } = new byte[0];
         
 
         public Symbol GetSymbol(string name)
